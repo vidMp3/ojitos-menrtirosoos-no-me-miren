@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Marea de Ojos · Dispersión Orgánica</title>
+  <style>
+    :root {
+      --bg: #0a0a0d;
+      --fg: #ffffff;
+      --lid-stroke: #181822;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      overflow: hidden;
+      user-select: none;
+      font-family: monospace;
+    }
+
+    /* Contenedor libre sin CSS Grid rígido */
+    #eye-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .eye {
+      --pupil-x: 0;
+      --pupil-y: 0;
+      --scale: 0.6;
+      --base-scale: 1;
+      --rot: 0deg;
+
+      position: absolute;
+      width: 140px;
+      height: 90px;
+      fill: none;
+
+      /* Posicionamiento y escalado desde el centro del elemento */
+      transform: translate(-50%, -50%) scale(calc(var(--scale) * var(--base-scale))) rotate(var(--rot));
+      transform-origin: center center;
+      will-change: transform;
+      cursor: pointer;
+    }
+
+    .whites {
+      fill: var(--fg);
+      transition: fill 0.3s ease;
+    }
+
+    /* Tono levemente enrojecido durante el modo frenesí */
+    body.frenzy .whites {
+      fill: #ffdddd;
+    }
+
+    .lids {
+      stroke: var(--lid-stroke);
+      stroke-width: 36px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    .pupil {
+      fill: #000000;
+    }
+
+    .glint {
+      fill: var(--fg);
+    }
+
+    .pupil-group {
+      transform: translate(calc(var(--pupil-x) * 1px), calc(var(--pupil-y) * 1px));
+      will-change: transform;
+    }
+
+    /* Pestañeo natural conservando posición relativa y tamaño */
+    .blink {
+      animation: blink-anim 0.15s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    @keyframes blink-anim {
+      0% { 
+        transform: translate(-50%, -50%) scale(calc(var(--scale) * var(--base-scale))) rotate(var(--rot)) scaleY(1); 
+      }
+      50% { 
+        transform: translate(-50%, -50%) scale(calc(var(--scale) * var(--base-scale))) rotate(var(--rot)) scaleY(0.14); 
+      }
+      100% { 
+        transform: translate(-50%, -50%) scale(calc(var(--scale) * var(--base-scale))) rotate(var(--rot)) scaleY(1); 
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="eye-container"></div>
+
+  <script>
+    const container = document.getElementById("eye-container");
+
+    // Formas de ojos orgánicas y variadas
+    const eyeShapes = [
+      "M 50 500 Q 500 0 950 500 Q 500 850 50 500 Z",      // Almendrado
+      "M 50 500 Q 500 -60 950 500 Q 500 920 50 500 Z",    // Redondeado
+      "M 50 500 Q 500 120 950 420 Q 500 780 50 500 Z",    // Inquietante
+      "M 50 420 Q 500 40 950 320 Q 500 880 50 420 Z"     // Entrecerrado
+    ];
+
+    let eyesData = [];
+    let maxDist = 800;
+
+    const mousePos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+
+    const maxEyeTravelX = 250;
+    const maxEyeTravelY = 110;
+
+    let frenzyTicks = 0;
+
+    function buildEyeSVG(id, shapePath, clipId) {
+      return `
+        <svg id="${id}" class="eye" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <clipPath id="${clipId}">
+              <path d="${shapePath}" />
+            </clipPath>
+          </defs>
+          <path class="whites" d="${shapePath}" />
+          <g clip-path="url(#${clipId})">
+            <g class="pupil-group">
+              <circle class="pupil" cx="500" cy="500" r="150" />
+              <circle class="glint" cx="440" cy="440" r="26" />
+              <circle class="glint" cx="530" cy="540" r="12" opacity="0.6" />
+            </g>
+          </g>
+          <path class="lids" d="${shapePath}" />
+        </svg>
+      `;
+    }
+
+    function init() {
+      window.addEventListener("resize", throttled(handleResize));
+
+      window.addEventListener("mousemove", (e) => {
+        mousePos.x = e.clientX;
+        mousePos.y = e.clientY;
+      });
+
+      // Clic -> Desata espasmo/frenesí caótico en todos los ojos
+      window.addEventListener("click", () => {
+        frenzyTicks = 90; // ~1.5 segundos a 60fps
+        document.body.classList.add("frenzy");
+
+        setTimeout(() => {
+          document.body.classList.remove("frenzy");
+        }, 1500);
+      });
+
+      handleResize();
+      requestAnimationFrame(animationLoop);
+      scheduleBlinking();
+    }
+
+    function handleResize() {
+      container.innerHTML = "";
+      eyesData = [];
+
+
+      // Generar aprox. 100 elementos dispersos de forma totalmente desordenada
+      const totalEyes = 100;
+      const aspect = window.innerWidth / window.innerHeight;
+      const numRows = Math.round(Math.sqrt(totalEyes / aspect));
+      const numCols = Math.round(totalEyes / numRows);
+
+      const cellWidth = 100 / numCols;
+      const cellHeight = 100 / numRows;
+
+      for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < numCols; c++) {
+          const index = r * numCols + c;
+          const id = `eye-${index}`;
+          const clipId = `clip-${index}`;
+          const shapePath = eyeShapes[index % eyeShapes.length];
+
+          // Posicionamiento con amplia dispersión aleatoria (Jitter)
+          const leftPercent = (c + 0.5 + (Math.random() - 0.5) * 0.85) * cellWidth;
+          const topPercent = (r + 0.5 + (Math.random() - 0.5) * 0.85) * cellHeight;
+
+          // Inclinación y variaciones de tamaño drásticas
+          const rotDeg = (Math.random() - 0.5) * 70;             // Ángulo de -35deg a +35deg
+          const baseScale = 0.45 + Math.random() * 0.95;         // Escalas de 0.45x hasta 1.40x
+
+          container.insertAdjacentHTML('beforeend', buildEyeSVG(id, shapePath, clipId));
+          const el = document.getElementById(id);
+
+          el.style.left = `${leftPercent.toFixed(2)}vw`;
+          el.style.top = `${topPercent.toFixed(2)}vh`;
+          el.style.setProperty("--rot", `${rotDeg.toFixed(1)}deg`);
+          el.style.setProperty("--base-scale", `${baseScale.toFixed(2)}`);
+
+          eyesData.push({
+            id: id,
+            el: el,
+            centerX: 0,
+            centerY: 0,
+            currPupilX: 0,
+            currPupilY: 0,
+            targetPupilX: 0,
+            targetPupilY: 0,
+            currScale: 0.6,
+            targetScale: 0.6
+          });
+        }
+      }
+
+      setTimeout(updateEyeCenters, 50);
+      maxDist = Math.hypot(window.innerWidth * 0.4, window.innerHeight * 0.4);
+    }
+
+    function updateEyeCenters() {
+      eyesData.forEach(item => {
+        const rect = item.el.getBoundingClientRect();
+        item.centerX = rect.left + rect.width * 0.5;
+        item.centerY = rect.top + rect.height * 0.5;
+      });
+    }
+
+    function triggerBlink(item) {
+      if (!item.el.classList.contains("blink")) {
+        item.el.classList.add("blink");
+        setTimeout(() => item.el.classList.remove("blink"), 150);
+      }
+    }
+
+    function animationLoop() {
+      const isFrenzy = frenzyTicks > 0;
+      if (isFrenzy) frenzyTicks--;
+
+      eyesData.forEach(item => {
+        let targetX, targetY, targetScale;
+
+        if (isFrenzy) {
+          targetX = (Math.random() - 0.5) * maxEyeTravelX * 1.8;
+          targetY = (Math.random() - 0.5) * maxEyeTravelY * 1.8;
+          targetScale = 0.55 + Math.random() * 1.0;
+
+          if (Math.random() < 0.16) {
+            triggerBlink(item);
+          }
+        } else {
+          const vecX = mousePos.x - item.centerX;
+          const vecY = mousePos.y - item.centerY;
+          const dist = Math.hypot(vecX, vecY);
+
+          // Proximidad: Cerca -> Grande (1.45), Lejos -> Pequeño (0.55)
+          targetScale = map(clamp(dist, 0, maxDist), 0, maxDist, 1.45, 0.55);
+          targetX = clamp(vecX, -maxEyeTravelX, maxEyeTravelX);
+          targetY = clamp(vecY, -maxEyeTravelY, maxEyeTravelY);
+        }
+
+        const normX = targetX / maxEyeTravelX;
+        const normY = targetY / maxEyeTravelY;
+        const ellDistSq = normX * normX + normY * normY;
+
+        if (ellDistSq > 1) {
+          const factor = 1 / Math.sqrt(ellDistSq);
+          targetX *= factor;
+          targetY *= factor;
+        }
+
+        item.targetPupilX = targetX;
+        item.targetPupilY = targetY;
+        item.targetScale = targetScale;
+
+        const lerpPupil = isFrenzy ? 0.45 : 0.20;
+        const lerpScale = isFrenzy ? 0.35 : 0.15;
+
+        item.currPupilX += (item.targetPupilX - item.currPupilX) * lerpPupil;
+        item.currPupilY += (item.targetPupilY - item.currPupilY) * lerpPupil;
+        item.currScale += (item.targetScale - item.currScale) * lerpScale;
+
+        item.el.style.setProperty("--pupil-x", item.currPupilX.toFixed(2));
+        item.el.style.setProperty("--pupil-y", item.currPupilY.toFixed(2));
+        item.el.style.setProperty("--scale", item.currScale.toFixed(3));
+      });
+
+      requestAnimationFrame(animationLoop);
+    }
+
+    function scheduleBlinking() {
+      eyesData.forEach(item => {
+        const randomDelay = Math.random() * 4000 + 1800;
+        setTimeout(function blinkBucle() {
+          if (frenzyTicks <= 0) {
+            triggerBlink(item);
+          }
+          setTimeout(blinkBucle, Math.random() * 5000 + 2200);
+        }, randomDelay);
+      });
+    }
+
+    function map(value, min1, max1, min2, max2) {
+      return (value - min1) * (max2 - min2) / (max1 - min1) + min2;
+    }
+
+    function clamp(value, min = 0, max = 1) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function throttled(fn) {
+      let didRequest = false;
+      return param => {
+        if (!didRequest) {
+          requestAnimationFrame(() => {
+            fn(param);
+            didRequest = false;
+          });
+          didRequest = true;
+        }
+      };
+    }
+
+    init();
+  </script>
+
+</body>
+</html>
